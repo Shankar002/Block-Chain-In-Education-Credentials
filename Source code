@@ -1,0 +1,373 @@
+{
+"name": "fabcar",
+"version": "0.0.1",
+"description": "e-store contract",
+"main": "index.js",
+"engines": {
+"node": ">=8",
+"npm": ">=5"
+},
+"scripts": {
+"lint": "eslint .",
+"pretest": "npm run lint",
+"test": "nyc mocha test --recursive",
+"start": "fabric-chaincode-node start",
+"mocha": "mocha test --recursive"
+},
+"engineStrict": true,
+"author": "emali",
+"dependencies": {
+"crypto-js": "latest",
+"fabric-contract-api": "^2.1.2",
+"fabric-shim": "^2.1.2",
+"jsrsasign": "^8.0.20",
+"merkletreejs": "^0.2.8"
+},
+"devDependencies": {
+"chai": "^4.1.2",
+"chai-as-promised": "^7.1.1",
+"eslint": "^5.16.0",
+"mocha": "^7.2.0",
+"nyc": "^15.1.0",
+"sinon": "^7.1.1",
+"sinon-chai": "^3.2.0"
+},
+"nyc": {
+"exclude": [
+"coverage/**",
+"test/**"
+],
+"reporter": [
+"text-summary",
+"html"
+],
+"all": true,
+"check-coverage": true,
+"statements": 100,
+"branches": 100,
+"funtions": 100,
+"lines": 100
+}
+}
+{
+"name": "fabcar",
+"version": "0.0.1",
+"description": "e-store contract",
+"main": "index.js",
+"engines": {
+"node": ">=8",
+"npm": ">=5"
+},
+"scripts": {
+"lint": "eslint .",
+"pretest": "npm run lint",
+"test": "nyc mocha test --recursive",
+"start": "fabric-chaincode-node start",
+"mocha": "mocha test --recursive"
+},
+"engineStrict": true,
+"author": "emali",
+"dependencies": {
+"crypto-js": "latest",
+"fabric-contract-api": "^2.1.2",
+"fabric-shim": "^2.1.2",
+"jsrsasign": "^8.0.20",
+"merkletreejs": "^0.2.8"
+},
+"devDependencies": {
+"chai": "^4.1.2",
+"chai-as-promised": "^7.1.1",
+"eslint": "^5.16.0",
+"mocha": "^7.2.0",
+"nyc": "^15.1.0",
+"sinon": "^7.1.1",
+"sinon-chai": "^3.2.0"
+},
+"nyc": {
+"exclude": [
+"coverage/**",
+"test/**"
+],
+"reporter": [
+"text-summary",
+"html"
+],
+"all": true,
+"check-coverage": true,
+"statements": 100,
+"branches": 100,
+"funtions": 100,
+"lines": 100
+}
+}
+let logger = require("../services/logger");
+let encryption = require('../services/encryption');
+let certificates = require('../database/models/certificates');
+async function getGenerateProof(req,res,next) {
+try {
+if (!req.query.sharedAttributes || req.query.sharedAttributes.length === 0) {throw
+Error("Choose atleast one attribute to share")
+}
+let mTreeProof = await
+encryption.generateCertificateProof(req.query.sharedAttributes, req.query.certUUID,
+req.session.email);
+let disclosedData = await certificates.findOne({"_id" :
+req.query.certUUID}).select(req.query.sharedAttributes.join(" ") + " -_id");
+res.status(200).send({
+proof: mTreeProof,
+disclosedData: disclosedData,
+certUUID: req.query.certUUID
+})
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function apiErrorHandler(err, req, res, next) {
+// set locals, only providing error in development
+res.locals.message = err.message;
+res.locals.error = req.app.get('env') === 'development' ? err : {};
+// render the error page
+return res.status(err.status || 500).send(JSON.stringify(err.message, undefined,
+4));
+}
+module.exports = {getGenerateProof, apiErrorHandler};
+let students = require('../database/models/students');
+let fabricEnrollment = require('../services/fabric/enrollment');
+let chaincode = require('../services/fabric/chaincode'); let
+logger = require("../services/logger");
+let studentService = require('../services/student-service');
+let title = "Student Dashboard";
+let root = "student";
+async function postRegisterStudent(req, res, next) {
+try {
+let keys = await fabricEnrollment.registerUser(req.body.email);
+let dbResponse = await students.create({
+name : req.body.name,
+email: req.body.email,
+password: req.body.password,
+publicKey: keys.publicKey
+});
+res.render("register-success", { title, root,
+logInType: req.session.user_type || "none"});
+}
+catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function logOutAndRedirect (req, res, next) {
+req.session.destroy(function () {
+res.redirect('/');
+});
+};
+async function postLoginStudent (req,res,next)
+{ try {
+let studentObject = await students.validateByCredentials(req.body.email,
+req.body.password)
+req.session.user_id = studentObject._id;
+req.session.user_type = "student";
+req.session.email = studentObject.email;
+req.session.name = studentObject.name;
+req.session.publicKey = studentObject.publicKey;
+return res.redirect("/student/dashboard")
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function getDashboard(req, res, next) {
+try {
+let certData = await
+studentService.getCertificateDataforDashboard(req.session.publicKey,
+req.session.email);
+res.render("dashboard-student", { title, root, certData,
+logInType: req.session.user_type || "none"});
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+module.exports = {postRegisterStudent, postLoginStudent, logOutAndRedirect,
+getDashboard};
+let universities = require('../database/models/universities');
+let fabricEnrollment = require('../services/fabric/enrollment');
+let chaincode = require('../services/fabric/chaincode'); let
+logger = require("../services/logger");
+let universityService = require("../services/university-service");
+let title = "University";
+let root = "university";
+async function postRegisterUniversity(req, res, next)
+{ try {
+let keys = await fabricEnrollment.registerUser(req.body.email);
+let location = req.body.location + `, ${req.body.country}`;
+let dbResponse = await universities.create({
+name : req.body.name,
+email: req.body.email,
+description: req.body.description,
+location: location,
+password: req.body.password,
+publicKey: keys.publicKey
+});
+let result = await chaincode.invokeChaincode("registerUniversity",
+[ req.body.name, keys.publicKey, location, req.body.description], false,
+req.body.email);
+logger.debug(`University Registered. Ledger profile: ${result}`);
+res.render("register-success", { title, root,
+logInType: req.session.user_type || "none"});
+}
+catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function postLoginUniversity (req,res,next) {
+try {
+let universityObject = await universities.validateByCredentials(req.body.email,
+req.body.password)
+req.session.user_id = universityObject._id;
+req.session.user_type = "university";
+req.session.email = universityObject.email;
+req.session.name = universityObject.name;
+return res.redirect("/university/issue")
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function logOutAndRedirect (req, res, next) {
+req.session.destroy(function () {
+res.redirect('/');
+});
+}
+async function postIssueCertificate(req,res,next) {
+try {
+let certData = {
+studentEmail: req.body.studentEmail,
+studentName: req.body.studentName,
+universityName: req.session.name,
+universityEmail: req.session.email,
+major: req.body.major,
+departmentName: req.body.department,
+cgpa: req.body.cgpa,
+dateOfIssuing: req.body.date,
+};
+let serviceResponse = await universityService.issueCertificate(certData);
+if(serviceResponse) {
+res.render("issue-success", { title, root,
+logInType: req.session.user_type || "none"});
+}
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+async function getDashboard(req, res, next) {
+try {
+let certData = await
+universityService.getCertificateDataforDashboard(req.session.name,
+req.session.email);
+res.render("dashboard-university", { title, root, certData,
+logInType: req.session.user_type || "none"});
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+module.exports = {postRegisterUniversity, postLoginUniversity, logOutAndRedirect,
+postIssueCertificate, getDashboard};
+let logger = require("../services/logger");
+let encryption = require('../services/encryption');
+let certificates =
+require('../database/models/certificates'); let moment =
+require('moment'); let title = "Verification Portal";
+let root = "verify";
+async function postVerify(req,res,next) {
+try {
+let proofObject = req.body.proofObject;
+proofObject = JSON.parse(proofObject);
+if (!proofObject.disclosedData || Object.keys(proofObject.disclosedData).length
+===0 ){
+throw new Error("No parameter given. Provide parameters that need to be
+verified");
+}
+let proofIsCorrect = await encryption.verifyCertificateProof(proofObject.proof,
+proofObject.disclosedData, proofObject.certUUID );
+if (proofIsCorrect) {
+let certificateDbObject = await certificates.findOne({"_id":
+proofObject.certUUID}).select("studentName studentEmail _id dateOfIssuing
+universityName universityEmail");
+res.render("verify-success", { title, root,
+logInType: req.session.user_type || "none",
+certData : certificateDbObject, proofData :
+proofObject.disclosedData
+})
+} else {
+res.render("verify-fail", {
+title, root,
+logInType: req.session.user_type || "none"
+})
+}
+} catch (e) {
+logger.error(e);
+next(e);
+}
+}
+module.exports = {postVerify};
+//initialize env variables, database and loaders.
+const config = require('./loaders/config');
+//load database
+const mongoose = require('./database/mongoose');
+//load fabric environemtn
+require('./loaders/fabric-loader');
+//third party libraries
+let createError = require('http-errors');
+let express = require('express');
+let path = require('path');
+let cookieParser = require('cookie-parser');
+let morgan = require('morgan'); const
+helmet = require('helmet');
+const cors = require('cors');
+//local imports
+let limiter = require('./middleware/rate-limitermiddleware'); const logger = require('./services/logger');
+const sessionMiddleware = require('./loaders/express-session-loader');
+//Router imports
+let indexRouter = require('./routes/index-router');
+let apiRouter = require('./routes/api-router');
+let universityRouter = require('./routes/university-router');
+let studentRouter = require('./routes/student-router'); let
+verifyRouter = require('./routes/verify-router');
+//express
+let app = express();
+// view engine setup
+app.set('views', path.join( dirname,
+'views')); app.set('view engine', 'ejs');
+//middleware
+app.use(cors());
+app.use(limiter.rateLimiterMiddlewareInMemory);
+app.use(morgan('tiny', { stream: logger.stream }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(express.static(path.join( dirname, 'public')));
+app.use(helmet());
+app.use(sessionMiddleware);
+//routers
+app.use('/', indexRouter);
+app.use('/api', apiRouter);
+app.use('/university', universityRouter);
+app.use('/student', studentRouter);
+app.use('/verify', verifyRouter);
+// catch 404 and forward to error handler
+app.use(function(req, res, next) {
+next(createError(404));
+});
+// error handler
+app.use(function(err, req, res, next) {
+// set locals, only providing error in development
+res.locals.message = err.message;
+res.locals.error = req.app.get('env') === 'development' ? err : {};
+// render the error page
+res.status(err.status || 500);
+res.render('error');
+})
